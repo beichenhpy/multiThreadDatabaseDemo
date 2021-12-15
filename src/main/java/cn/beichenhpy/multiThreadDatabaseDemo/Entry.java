@@ -1,7 +1,5 @@
 package cn.beichenhpy.multiThreadDatabaseDemo;
 
-import cn.beichenhpy.multiThreadDatabaseDemo.modal.Address;
-import cn.beichenhpy.multiThreadDatabaseDemo.service.WorkService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -12,7 +10,10 @@ import org.springframework.transaction.support.DefaultTransactionDefinition;
 
 import javax.annotation.Resource;
 import java.util.List;
-import java.util.concurrent.*;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -46,10 +47,13 @@ public class Entry {
                 TransactionStatus transaction = platformTransactionManager.getTransaction(transactionDefinition);
                 try {
                     log.info("{}已开始", Thread.currentThread().getName());
-                    if (innerI == 1){
-                        throw new RuntimeException();
-                    }
+//                    if (innerI == 1){
+//                        throw new RuntimeException();
+//                    }
+                    insert();
+                    log.info("{},1", Thread.currentThread().getName());
                     all_state.add(true);
+                    log.info("{},2", Thread.currentThread().getName());
                     children.countDown();
                     log.info("{}已完成，等待是否提交", Thread.currentThread().getName());
                     main.await();
@@ -59,7 +63,9 @@ public class Entry {
                         platformTransactionManager.rollback(transaction);
                     }
                 } catch (Exception e) {
+                    log.info("{},3", Thread.currentThread().getName());
                     all_state.add(false);
+                    log.info("{},4", Thread.currentThread().getName());
                     children.countDown();
                     log.error("error:{}", e.getMessage());
                 }
