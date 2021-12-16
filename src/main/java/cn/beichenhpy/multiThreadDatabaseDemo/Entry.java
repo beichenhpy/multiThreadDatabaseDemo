@@ -10,10 +10,7 @@ import org.springframework.transaction.support.DefaultTransactionDefinition;
 
 import javax.annotation.Resource;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -33,8 +30,8 @@ public class Entry {
     @Resource
     private PlatformTransactionManager platformTransactionManager;
 
-    private AtomicBoolean all_ok = new AtomicBoolean(true);
-    private List<Boolean> all_state = new CopyOnWriteArrayList<>();
+    private final AtomicBoolean all_ok = new AtomicBoolean(true);
+    private final List<Boolean> all_state = new CopyOnWriteArrayList<>();
 
     public void multi() {
         CountDownLatch main = new CountDownLatch(1);
@@ -55,7 +52,7 @@ public class Entry {
                     all_state.add(true);
                     log.info("{},2", Thread.currentThread().getName());
                     children.countDown();
-                    log.info("{}已完成，等待是否提交", Thread.currentThread().getName());
+                    log.info("{}已完成，等待是否提交,此时计数为：{}", Thread.currentThread().getName(), children.getCount());
                     main.await();
                     if (all_ok.get()) {
                         platformTransactionManager.commit(transaction);
@@ -74,11 +71,17 @@ public class Entry {
         //主线程
         try {
             //等待子线程全部完成
-            children.await();
-            for (Boolean state : all_state) {
-                if (!state) {
-                    all_ok.set(false);
-                    break;
+            log.info("主线程等待子线程执行完毕");
+            boolean waitChildrenTimeOut = children.await(5, TimeUnit.SECONDS);
+            if (!waitChildrenTimeOut){
+                log.error("等待超时，全部回滚，此时的子线程计数：{}", children.getCount());
+                all_ok.set(false);
+            }else {
+                for (Boolean state : all_state) {
+                    if (!state) {
+                        all_ok.set(false);
+                        break;
+                    }
                 }
             }
             main.countDown();
@@ -88,10 +91,8 @@ public class Entry {
     }
 
     private void insert() {
-        StringBuffer sql = new StringBuffer();
-        sql.append("    INSERT INTO ADDRESS VALUES(?,?,?)   \n");
         Object[] args = {1, "1", "1"};
-        int update = jdbcTemplate.update(sql.toString(), args);
+        int update = jdbcTemplate.update("    INSERT INTO ADDRESS VALUES(?,?,?)   \n", args);
         if (update == 0){
             throw new RuntimeException();
         }
